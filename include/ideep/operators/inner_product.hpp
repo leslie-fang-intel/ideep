@@ -223,6 +223,9 @@ private:
     }
 
     tensor::desc dst_desc(dst_dims, dst_data_type, format_tag::any);
+
+    op_attr.set_scratchpad_mode(dnnl::scratchpad_mode::user);
+
     auto pd = get_primitive_desc(
         src_desc,
         weights_desc,
@@ -239,18 +242,22 @@ private:
       dst.set_scale(dst_scales_in);
     }
 
+    tensor scratchpad(pd.scratchpad_desc());
+
     if (with_bias){
       auto expected_bias = bias.reorder_if_differ_in(pd.bias_desc(), bias_attr);
       super(pd).execute(stream::default_stream(),
                         {{DNNL_ARG_SRC, expected_src},
                          {DNNL_ARG_WEIGHTS, expected_weights},
                          {DNNL_ARG_BIAS, expected_bias},
-                         {DNNL_ARG_DST, dst}});
+                         {DNNL_ARG_DST, dst},
+                         {DNNL_ARG_SCRATCHPAD, scratchpad}});
     } else {
       super(pd).execute(stream::default_stream(),
                         {{DNNL_ARG_SRC, expected_src},
                          {DNNL_ARG_WEIGHTS, expected_weights},
-                         {DNNL_ARG_DST, dst}});
+                         {DNNL_ARG_DST, dst},
+                         {DNNL_ARG_SCRATCHPAD, scratchpad}});
     }
 
     if (attr.non_negitive_output() && dst.get_data_type() == data_type::s8) {
@@ -291,17 +298,22 @@ struct inner_product_backward_data : public dnnl::inner_product_backward_data {
     auto forward_hints = inner_product_forward::get_primitive_desc(
         diff_src_desc, weights_desc, diff_dst_desc);
 
+    auto op_attr = dnnl::primitive_attr();
+    op_attr.set_scratchpad_mode(dnnl::scratchpad_mode::user);
+
     auto pd = primitive_desc(
-        {diff_src_desc, weights_desc, diff_dst_desc}, aengine, forward_hints);
+        {diff_src_desc, weights_desc, diff_dst_desc}, op_attr, aengine, forward_hints);
 
     auto expected_diff_dst = diff_dst.reorder_if_differ_in(pd.diff_dst_desc());
     auto expected_weights = weights_.reorder_if_differ_in(pd.weights_desc());
     diff_src.reinit_if_possible(pd.diff_src_desc());
+    tensor scratchpad(pd.scratchpad_desc());
 
     super(pd).execute(stream::default_stream(),
                       {{DNNL_ARG_DIFF_DST, expected_diff_dst},
                        {DNNL_ARG_WEIGHTS, expected_weights},
-                       {DNNL_ARG_DIFF_SRC, diff_src}});
+                       {DNNL_ARG_DIFF_SRC, diff_src},
+                       {DNNL_ARG_SCRATCHPAD, scratchpad}});
   }
 };
 
@@ -359,19 +371,26 @@ private:
     }
     auto forward_hints = inner_product_forward::get_primitive_desc(
         src_desc, weights_desc, diff_dst_desc, diff_bias_desc, with_diff_bias);
+
+    auto op_attr = dnnl::primitive_attr();
+    op_attr.set_scratchpad_mode(dnnl::scratchpad_mode::user);
+
     auto pd = with_diff_bias
         ? primitive_desc({src_desc, diff_weights_desc, diff_bias_desc,
-                          diff_dst_desc}, aengine, forward_hints)
+                          diff_dst_desc}, op_attr, aengine, forward_hints)
         : primitive_desc({src_desc, diff_weights_desc, diff_dst_desc},
-                          aengine, forward_hints);
+                          op_attr, aengine, forward_hints);
 
     auto expected_diff_dst = diff_dst.reorder_if_differ_in(pd.diff_dst_desc());
     auto expected_src = src.reorder_if_differ_in(pd.src_desc());
     diff_weights.reinit_if_possible(pd.diff_weights_desc());
 
+    tensor scratchpad(pd.scratchpad_desc());
+
     exec_args args {{DNNL_ARG_DIFF_DST, expected_diff_dst},
                     {DNNL_ARG_SRC, expected_src},
-                    {DNNL_ARG_DIFF_WEIGHTS ,diff_weights}};
+                    {DNNL_ARG_DIFF_WEIGHTS ,diff_weights},
+                    {DNNL_ARG_SCRATCHPAD, scratchpad}};
 
     if (with_diff_bias) {
       diff_bias.reinit_if_possible(pd.diff_bias_desc());
