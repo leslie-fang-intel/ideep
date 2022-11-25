@@ -78,8 +78,9 @@ struct conv_deconv_utils {
       const auto& src_zero_point = src.has_zero_point() ? src.get_zero_point() :
                                    src_zero_points.empty() ? default_zero_point : src_zero_points;
       const auto& weights_zero_point = weight_grouped.has_zero_point() ? weight_grouped.get_zero_point() : default_zero_point;
-      const auto& dst_zero_point = dst.has_zero_point() ? dst.get_zero_point() :
-                                   dst_zero_points.empty() ? default_zero_point : dst_zero_points;
+      const auto& dst_zero_point = !dst_zero_points.empty() ? dst_zero_points :
+                                   dst.has_zero_point() ? dst.get_zero_point() : default_zero_point;
+
       const auto src_zero_point_size = static_cast<dim>(src_zero_point.size());
       const auto weights_zero_point_size = 1;
       const auto dst_zero_point_size = static_cast<dim>(dst_zero_point.size());
@@ -93,12 +94,14 @@ struct conv_deconv_utils {
       if (attr.has_op_kind(kind::sum)) {
         float sum_scale =
             dst_scales_in[0] / (dst.has_scale() ? dst.get_scale()[0] : 1.0f);
+        int32_t sum_zero_point = dst.has_zero_point() ? dst.get_zero_point()[0] : 0;
         if (attr.has_op_kind(kind::eltwise)) {
-          op_attr = attr_t::residual(sum_scale);
+          op_attr = attr_t::residual_with_sum_zero_point(sum_scale, sum_zero_point);
         } else {
-          op_attr = attr_t::fuse_sum(sum_scale);
+          op_attr = attr_t::fuse_sum(sum_scale, sum_zero_point);
         }
       }
+
       op_attr.set_output_scales(utils::op_scale_mask(scale_size), op_scales);
       zero_point_t src_zero_point_in_attr;
       int zp_mask = utils::tensor_zp_mask(1);
@@ -415,17 +418,20 @@ struct convolution_forward
       algorithm aalgorithm = algorithm::convolution_direct,
       prop_kind aprop_kind = prop_kind::forward,
       const lowp_kind alowp_kind = u8s8,
-      const engine& aengine = engine::cpu_engine()) {
+      const engine& aengine = engine::cpu_engine(),
+      const zero_point_t& src_zero_points = zero_point_t(),
+      const zero_point_t& weights_zero_points = zero_point_t(),
+      const zero_point_t& dst_zero_points = zero_point_t()) {
     if (bias.is_empty()) {
       do_prepare</*with_bias=*/false, /*keep_format=*/false>(
           param, src, weights, bias, dst_dims, dst, strides, dilates,
           padding_l, padding_r, groups, src_scales, weights_scales, dst_scales,
-          zero_point_t(), zero_point_t(), attr, aalgorithm, aprop_kind, alowp_kind, aengine);
+          src_zero_points, dst_zero_points, attr, aalgorithm, aprop_kind, alowp_kind, aengine);
     } else {
       do_prepare</*with_bias=*/true, /*keep_format=*/false>(
           param, src, weights, bias, dst_dims, dst, strides, dilates,
           padding_l, padding_r, groups, src_scales, weights_scales, dst_scales,
-          zero_point_t(), zero_point_t(), attr, aalgorithm, aprop_kind, alowp_kind, aengine);
+          src_zero_points, dst_zero_points, attr, aalgorithm, aprop_kind, alowp_kind, aengine);
     }
   }
 
@@ -983,6 +989,7 @@ private:
     dst.reinit_if_possible(pd.dst_desc());
 
     if (!param.dst_scales.empty() && dst.get_data_type() != data_type::f32) {
+      // Reset the dst scale to param.dst_scales
       dst.set_scale(param.dst_scales);
     }
 
