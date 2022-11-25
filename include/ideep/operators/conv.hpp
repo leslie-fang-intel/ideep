@@ -70,6 +70,7 @@ struct conv_deconv_utils {
         dst_data_type = data_type::s8;
       }
 
+      std::cout<<"dst_data_type is u8: "<<(dst_data_type == data_type::u8)<<std::endl;
       // fill primitive attr
       dst_scales_in = dst_scales.empty() || dst_data_type == data_type::f32
                           ? IDEEP_DEF_SCALE
@@ -87,18 +88,34 @@ struct conv_deconv_utils {
                     "DNNL only support 1-dim zero_point");
 
       scale_t bias_scales, op_scales;
+      std::cout<<"Start to print the scales"<<std::endl;
+      std::cout<<"src_scales_in[0]: "<<src_scales_in[0]<<std::endl;
+      std::cout<<"dst_scales_in[0]: "<<dst_scales_in[0]<<std::endl;
+
+      std::cout<<"weights_scales_in.size(): "<<weights_scales_in.size()<<std::endl;
+      std::cout<<"weights_scales_in[0]: "<<weights_scales_in[0]<<std::endl;
+
       std::tie(bias_scales, op_scales) = utils::compute_scales(
           src_scales_in[0], dst_scales_in[0], weights_scales_in);
 
       if (attr.has_op_kind(kind::sum)) {
+        std::cout<<"op attr has the kind::sum"<<std::endl;
         float sum_scale =
             dst_scales_in[0] / (dst.has_scale() ? dst.get_scale()[0] : 1.0f);
+        int32_t sum_zero_point = dst.has_zero_point() ? dst.get_zero_point()[0] : 0;
+        std::cout<<"sum_scale is: "<<sum_scale<<std::endl;
+        std::cout<<"attr.has_op_kind(kind::eltwise) is: "<<attr.has_op_kind(kind::eltwise)<<std::endl;
         if (attr.has_op_kind(kind::eltwise)) {
           op_attr = attr_t::residual(sum_scale);
         } else {
-          op_attr = attr_t::fuse_sum(sum_scale);
+          op_attr = attr_t::fuse_sum(sum_scale, sum_zero_point);
+          //op_attr = attr_t::fuse_sum(sum_scale);
         }
       }
+
+      std::cout<<"op_scales size: "<<op_scales.size()<<std::endl;
+      std::cout<<"op_scales[0]: "<<op_scales[0]<<std::endl;
+
       op_attr.set_output_scales(utils::op_scale_mask(scale_size), op_scales);
       zero_point_t src_zero_point_in_attr;
       int zp_mask = utils::tensor_zp_mask(1);
@@ -794,6 +811,7 @@ private:
       const engine& aengine = engine::cpu_engine()) {
     convolution_forward_params params;
 
+    std::cout<<"plain_format is: "<<plain_format<<std::endl;
     if (plain_format) {
       // Used for pytorch default CPU path, i.e. plain-in-plain-out
       // see [keep_format] for more details
@@ -946,6 +964,7 @@ private:
     tensor weights_grouped;
     dims dil_compatible;
 
+    std::cout<<"Inside the do_prepare"<<std::endl;
     conv_deconv_utils::prepare_parameters(
         src, weights, bias, dst_dims, dst, dilates, groups,
         src_scales, weights_scales, dst_scales, src_zero_point, dst_zero_point,
@@ -1000,12 +1019,27 @@ private:
                          {DNNL_ARG_SCRATCHPAD, scratchpad},
                          {DNNL_ARG_ATTR_ZERO_POINTS | DNNL_ARG_SRC, src_zero_point_m}});
     } else {
+      std::cout<<"Here is the calculation position"<<std::endl;
+      std::cout<<uint32_t(*((uint8_t*)(expected_src.get_data_handle())))<<std::endl;
+      std::cout<<"expected_src.dims[0]: "<<expected_src.get_dims()[0]<<std::endl;
+      std::cout<<"expected_src.dims[1]: "<<expected_src.get_dims()[1]<<std::endl;
+      std::cout<<"expected_src.dims[2]: "<<expected_src.get_dims()[2]<<std::endl;
+      std::cout<<"expected_src.dims[3]: "<<expected_src.get_dims()[3]<<std::endl;
+      std::cout<<"expected_src.get_data_type(): "<<(expected_src.get_data_type() == dnnl::memory::data_type::u8)<<std::endl;
+      
+      std::cout<<"src_zero_point_m.get_dims().size(): "<<src_zero_point_m.get_dims().size()<<std::endl;
+      std::cout<<"src_zero_point_m.get_dims()[0]: "<<src_zero_point_m.get_dims()[0]<<std::endl;
+      std::cout<<"src_zero_point_m.get_data_type() is int32 : "<<(src_zero_point_m.get_data_type() == dnnl::memory::data_type::s32)<<std::endl;
+      std::cout<<int(*((int*)(src_zero_point_m.get_data_handle())))<<std::endl;
+      
       super(pd).execute(stream::default_stream(), 
                         {{DNNL_ARG_SRC, expected_src},
                          {DNNL_ARG_WEIGHTS, expected_weights},
                          {DNNL_ARG_DST, dst},
                          {DNNL_ARG_SCRATCHPAD, scratchpad},
                          {DNNL_ARG_ATTR_ZERO_POINTS | DNNL_ARG_SRC, src_zero_point_m}});
+      std::cout<<"dst.get_data_type(): "<<(dst.get_data_type() == dnnl::memory::data_type::u8)<<std::endl;
+      std::cout<<uint32_t(*((uint8_t*)(dst.get_data_handle())))<<std::endl;
     }
   }
 
