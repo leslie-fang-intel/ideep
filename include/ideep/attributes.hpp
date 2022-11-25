@@ -3,7 +3,7 @@
 
 #include "abstract_types.hpp"
 #include "utils.hpp"
-
+#include <iostream>
 namespace ideep {
 
 using post_ops = dnnl::post_ops;
@@ -104,25 +104,29 @@ struct attr_t : public dnnl::primitive_attr {
     return attr;
   }
 
-  static attr_t residual(float sum_scale = 1.0, float relu_scale = 1.0,
-                         float alpha = 0.f, float beta = 0.f, int32_t sum_zero_point = 0) {
+  static attr_t residual_with_sum_zero_point(float sum_scale = 1.0,
+                         int32_t sum_zero_point = 0, float relu_scale = 1.0,
+                         float alpha = 0.f, float beta = 0.f) {
     attr_t attr;
     post_ops po;
+    // std::cout<<"Inside ideep residual sum_scale is: "<<sum_scale<<std::endl;
+    // std::cout<<"Inside ideep residual relu_scale is: "<<relu_scale<<std::endl;
+    // std::cout<<"Inside ideep residual sum_zero_point is: "<<sum_zero_point<<std::endl;
     po.append_sum(sum_scale, sum_zero_point);
     po.append_eltwise(relu_scale, algorithm::eltwise_relu, alpha, beta);
     attr.set_post_ops(po);
     return attr;
   }
 
-  // static attr_t residual(float sum_scale = 1.0, float relu_scale = 1.0,
-  //                        float alpha = 0.f, float beta = 0.f) {
-  //   attr_t attr;
-  //   post_ops po;
-  //   po.append_sum(sum_scale);
-  //   po.append_eltwise(relu_scale, algorithm::eltwise_relu, alpha, beta);
-  //   attr.set_post_ops(po);
-  //   return attr;
-  // }
+  static attr_t residual(float sum_scale = 1.0, float relu_scale = 1.0,
+                         float alpha = 0.f, float beta = 0.f) {
+    attr_t attr;
+    post_ops po;
+    po.append_sum(sum_scale);
+    po.append_eltwise(relu_scale, algorithm::eltwise_relu, alpha, beta);
+    attr.set_post_ops(po);
+    return attr;
+  }
 
   static attr_t fuse_clamp(float lower_bound = -1.0, float upper_bound = 1.0) {
     attr_t attr;
