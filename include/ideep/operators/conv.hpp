@@ -79,8 +79,11 @@ struct conv_deconv_utils {
       const auto& src_zero_point = src.has_zero_point() ? src.get_zero_point() :
                                    src_zero_points.empty() ? default_zero_point : src_zero_points;
       const auto& weights_zero_point = weight_grouped.has_zero_point() ? weight_grouped.get_zero_point() : default_zero_point;
-      const auto& dst_zero_point = dst.has_zero_point() ? dst.get_zero_point() :
-                                   dst_zero_points.empty() ? default_zero_point : dst_zero_points;
+      // const auto& dst_zero_point = dst.has_zero_point() ? dst.get_zero_point() :
+      //                              dst_zero_points.empty() ? default_zero_point : dst_zero_points;
+
+      const auto& dst_zero_point = !dst_zero_points.empty() ? dst_zero_points : dst.has_zero_point() ? dst.get_zero_point() : default_zero_point;
+
       const auto src_zero_point_size = static_cast<dim>(src_zero_point.size());
       const auto weights_zero_point_size = 1;
       const auto dst_zero_point_size = static_cast<dim>(dst_zero_point.size());
@@ -431,17 +434,20 @@ struct convolution_forward
       algorithm aalgorithm = algorithm::convolution_direct,
       prop_kind aprop_kind = prop_kind::forward,
       const lowp_kind alowp_kind = u8s8,
-      const engine& aengine = engine::cpu_engine()) {
+      const engine& aengine = engine::cpu_engine(),
+      const zero_point_t& src_zero_points = zero_point_t(),
+      const zero_point_t& weights_zero_points = zero_point_t(),
+      const zero_point_t& dst_zero_points = zero_point_t()) {
     if (bias.is_empty()) {
       do_prepare</*with_bias=*/false, /*keep_format=*/false>(
           param, src, weights, bias, dst_dims, dst, strides, dilates,
           padding_l, padding_r, groups, src_scales, weights_scales, dst_scales,
-          zero_point_t(), zero_point_t(), attr, aalgorithm, aprop_kind, alowp_kind, aengine);
+          src_zero_points, dst_zero_points, attr, aalgorithm, aprop_kind, alowp_kind, aengine);
     } else {
       do_prepare</*with_bias=*/true, /*keep_format=*/false>(
           param, src, weights, bias, dst_dims, dst, strides, dilates,
           padding_l, padding_r, groups, src_scales, weights_scales, dst_scales,
-          zero_point_t(), zero_point_t(), attr, aalgorithm, aprop_kind, alowp_kind, aengine);
+          src_zero_points, dst_zero_points, attr, aalgorithm, aprop_kind, alowp_kind, aengine);
     }
   }
 
@@ -1002,8 +1008,9 @@ private:
 
     if (!param.dst_scales.empty() && dst.get_data_type() != data_type::f32) {
       // Reset the dst scale to param.dst_scales
-      // std::cout<<"set the dst scale to: "<<param.dst_scales[0]<<std::endl;
+      std::cout<<"set the dst scale to: "<<param.dst_scales[0]<<std::endl;
       dst.set_scale(param.dst_scales);
+      // dst.set_zero_point(ideep::zero_point_t(1, 140));
     }
 
     tensor src_zero_point_m;
