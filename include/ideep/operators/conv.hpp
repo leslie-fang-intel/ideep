@@ -108,6 +108,14 @@ struct conv_deconv_utils {
                           : (src_scales.empty() ? IDEEP_DEF_SCALE : src_scales);
 
       // determine dst data type
+      std::cout<<"dst.get_data_type() != data_type::undef is: "<<(dst.get_data_type() != data_type::undef)<<std::endl;
+      std::cout<<"dst.get_data_type() == data_type::s8 is: "<<(dst.get_data_type() == data_type::s8)<<std::endl;
+      
+      std::cout<<"src.get_data_type() == data_type::s8 is: "<<(src.get_data_type() == data_type::s8)<<std::endl;
+
+
+      bool u8_input = (src.get_data_type() == data_type::u8) ? true : false;
+
       if (dst.get_data_type() != data_type::undef) {
         dst_data_type = dst.get_data_type();
       } else if (dst_scales.empty() || dst_scales == IDEEP_DEF_SCALE) {
@@ -170,7 +178,7 @@ struct conv_deconv_utils {
       }
 
       src_desc = {src.get_dims(),
-                  alowp_kind == u8s8 ? data_type::u8 : data_type::s8, tag::any};
+                  u8_input ? data_type::u8 : data_type::s8, tag::any};
       if (src.get_data_type() == data_type::f32) {
         src_attr = {0, src_scales_in};
       }
