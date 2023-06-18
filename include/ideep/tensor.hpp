@@ -950,7 +950,10 @@ class tensor : public memory {
   inline void reorder_to(tensor& dst, const attr_t& aattr = attr_t()) const {
     attr_t op_attr = aattr;
     op_attr.set_scratchpad_mode(dnnl::scratchpad_mode::user);
-    auto pd = dnnl::reorder::primitive_desc(*this, dst, op_attr);
+    // auto pd = dnnl::reorder::primitive_desc(*this, dst, op_attr);
+
+    auto engine_to_use = dst.get_engine();
+    auto pd = dnnl::reorder::primitive_desc(engine_to_use, (*this).get_desc(), engine_to_use, dst.get_desc(), op_attr);
 
     tensor scratchpad(pd.scratchpad_desc());
     exec_args args;
